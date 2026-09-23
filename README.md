@@ -13,7 +13,9 @@ It contains sample data files representing common testing protocols (Electrochem
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
-├── analyze_impedance.py          # Standalone impedance analysis & squared Nyquist plot
+├── analyze_impedance.py          # Impedance analysis & Nyquist plot (using impedance package)
+├── analyze_cv.py                 # Cyclic voltammetry analysis & capacitance calculation
+├── analyze_cap_rate_cycle.py     # MACCOR cycling analysis & rate capability summary
 ├── data/
 │   ├── gamry_impedance_sample.DTA# Full-spectrum Gamry impedance test data (86 points)
 │   ├── gamry_eis_sample.DTA      # Gamry EIS potentiostatic test data
@@ -23,7 +25,7 @@ It contains sample data files representing common testing protocols (Electrochem
 │   └── maccor_cycling_sample.xlsx# MACCOR exported Excel cycling data
 └── tests/
     ├── __init__.py
-    ├── test_impedance.py         # Dedicated impedance data & circuit-fitting tests
+    ├── test_impedance.py         # Dedicated impedance data & circuit-fitting tests (impedance.py)
     ├── test_gamry_loaders.py     # Loaders and tests for Gamry formats (EIS + CV)
     └── test_maccor_loaders.py    # Loaders and tests for MACCOR formats (CSV + Excel)
 ```
@@ -74,15 +76,27 @@ python3 -m unittest tests/test_impedance.py
 
 ---
 
-## Running Impedance Analysis & Plotting
+## Running the Analysis Scripts
 
-To analyze `data/gamry_impedance_sample.DTA`, fit the series RC equivalent circuit, and output a squared Nyquist plot:
+The repository includes standalone, runnable scripts adapted for the test data:
 
-```bash
-python3 analyze_impedance.py
-```
+1. **Impedance Analysis & Nyquist Plot** (using `impedance.py`):
+   ```bash
+   python3 analyze_impedance.py
+   ```
+   Loads `data/gamry_impedance_sample.DTA`, fits the equivalent circuit model, and displays a squared Nyquist plot (1 $\Omega$ on $X$ equals 1 $\Omega$ on $Y$).
 
-This generates `nyquist_plot.png` with equal aspect ratio geometry (1 $\Omega$ on $X$ equals 1 $\Omega$ on $Y$).
+2. **Cyclic Voltammetry Analysis**:
+   ```bash
+   python3 analyze_cv.py
+   ```
+   Loads `data/gamry_cv_sample.csv`, integrates positive/negative current loops, and prints charging and discharging capacitance values ($C_{ch}$, $C_{dch}$).
+
+3. **MACCOR Rate Cycling Analysis**:
+   ```bash
+   python3 analyze_cap_rate_cycle.py
+   ```
+   Loads `data/maccor_cycling_sample.xlsx`, calculates capacitance/resistance per cycle, and prints the formatted summary table across current rates.
 
 ---
 

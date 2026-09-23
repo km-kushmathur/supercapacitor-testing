@@ -1,109 +1,53 @@
-"""
-Impedance analysis and Nyquist plotting for Gamry .DTA electrochemical files.
-"""
-
-from pathlib import Path
 import matplotlib.pyplot as plt
-import numpy as np
+from pathlib import Path
+from impedance import preprocessing
+from impedance.models.circuits import CustomCircuit
+from impedance.visualization import plot_nyquist
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# Default impedance data file
-DEFAULT_DATA_FILE = BASE_DIR / "data" / "gamry_impedance_sample.DTA"
+# 1. Load your Gamry .DTA file directly
+filename = BASE_DIR / "data" / "gamry_impedance_sample.DTA"
+frequencies, Z = preprocessing.readGamry(filename)
 
+# 2. Define the Equivalent Circuit Model
+# Option A (Series RC): 'R0-C1'
+# Option B (Randles): 'R0-p(R1,C1)'
 
-def load_gamry_impedance(filename):
-    """
-    Loads frequency and complex impedance from a Gamry .DTA file.
-    Prefers impedance.preprocessing.readGamry if installed, otherwise uses built-in loader.
-    """
-    try:
-        from impedance import preprocessing
-        frequencies, z = preprocessing.readGamry(str(filename))
-        return frequencies, z
-    except ImportError:
-        from tests.test_gamry_loaders import load_gamry_dta
-        _, tables = load_gamry_dta(filename)
-        zcurve = tables["ZCURVE"]
-        frequencies = zcurve["Freq"].astype(float).values
-        z_real = zcurve["Zreal"].astype(float).values
-        z_imag = zcurve["Zimag"].astype(float).values
-        return frequencies, z_real + 1j * z_imag
+circuit_string = 'R0-C1'
+initial_guesses = [10, 25]  # Provide one guess per element in your string
 
+circuit = CustomCircuit(circuit_string, initial_guess=initial_guesses)
 
-def fit_equivalent_circuit(frequencies, z, circuit_string="R0-C1", initial_guesses=(10.0, 25.0)):
-    """
-    Fits equivalent circuit model to impedance data.
-    """
-    try:
-        from impedance.models.circuits import CustomCircuit
-        circuit = CustomCircuit(circuit_string, initial_guess=list(initial_guesses))
-        circuit.fit(frequencies, z)
-        z_fit = circuit.predict(frequencies)
-        return circuit, z_fit
-    except ImportError:
-        # Fallback using pure numpy series RC calculation
-        from tests.test_impedance import fit_series_rc
-        fit_results = fit_series_rc(frequencies, z.real, z.imag)
-        rs = fit_results["Rs_ohm"]
-        cap = fit_results["Capacitance_F"]
-        omega = 2.0 * np.pi * frequencies
-        z_fit = rs - 1j / (omega * cap)
-        return fit_results, z_fit
+# 3. Fit the model to your data
+circuit.fit(frequencies, Z)
+print(circuit)
 
+# 4. Predict and plot the fit
+Z_fit = circuit.predict(frequencies)
 
-def plot_nyquist_squared(z_raw, z_fit=None, title="Nyquist Plot"):
-    """
-    Plots Nyquist curve with equal 1:1 aspect ratio and squared axis limits.
-    """
-    fig, ax = plt.subplots(figsize=(8, 8))
+fig, ax = plt.subplots()
+plot_nyquist(Z, fmt='o', ax=ax, label='Raw Gamry Data')
+plot_nyquist(Z_fit, fmt='-', ax=ax, label='Fitted Circuit')
 
-    ax.plot(z_raw.real, -z_raw.imag, "o", label="Raw Gamry Data", markersize=5)
-    if z_fit is not None:
-        ax.plot(z_fit.real, -z_fit.imag, "-", label="Fitted Circuit", linewidth=2)
+# Make Nyquist geometry visually correct: 1 ohm on x equals 1 ohm on y.
+# Also enforce square plotting limits so a true semicircle is not stretched.
+all_real_impedance_values = [z.real for z in Z] + [z.real for z in Z_fit]
+all_negative_imag_impedance_values = [-z.imag for z in Z] + [-z.imag for z in Z_fit]
 
-    # Make Nyquist geometry visually correct: 1 ohm on x equals 1 ohm on y.
-    all_real = [val.real for val in z_raw] + ([val.real for val in z_fit] if z_fit is not None else [])
-    all_neg_imag = [-val.imag for val in z_raw] + ([-val.imag for val in z_fit] if z_fit is not None else [])
+real_axis_min, real_axis_max = min(all_real_impedance_values), max(all_real_impedance_values)
+imag_axis_min, imag_axis_max = min(all_negative_imag_impedance_values), max(all_negative_imag_impedance_values)
 
-    real_min, real_max = min(all_real), max(all_real)
-    imag_min, imag_max = min(all_neg_imag), max(all_neg_imag)
+max_axis_span = max(real_axis_max - real_axis_min, imag_axis_max - imag_axis_min)
+axis_padding = 0.05 * max_axis_span if max_axis_span > 0 else 1.0
 
-    max_span = max(real_max - real_min, imag_max - imag_min)
-    padding = 0.05 * max_span if max_span > 0 else 1.0
+real_axis_center = 0.5 * (real_axis_min + real_axis_max)
+imag_axis_center = 0.5 * (imag_axis_min + imag_axis_max)
+half_square_span = 0.5 * max_axis_span + axis_padding
 
-    real_center = 0.5 * (real_min + real_max)
-    imag_center = 0.5 * (imag_min + imag_max)
-    half_span = 0.5 * max_span + padding
+ax.set_aspect('equal', adjustable='box')
+ax.set_xlim(real_axis_center - half_square_span, real_axis_center + half_square_span)
+ax.set_ylim(imag_axis_center - half_square_span, imag_axis_center + half_square_span)
 
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_xlim(real_center - half_span, real_center + half_span)
-    ax.set_ylim(imag_center - half_span, imag_center + half_span)
-
-    ax.set_xlabel(r"$Z_{real}\ (\Omega)$", fontsize=12)
-    ax.set_ylabel(r"$-Z_{imag}\ (\Omega)$", fontsize=12)
-    ax.set_title(title, fontsize=14)
-    ax.grid(True, linestyle="--", alpha=0.6)
-    ax.legend(frameon=True)
-
-    return fig, ax
-
-
-def main():
-    data_path = DEFAULT_DATA_FILE
-    print(f"Loading Gamry impedance file: {data_path}")
-    frequencies, z = load_gamry_impedance(data_path)
-    print(f"Loaded {len(frequencies)} points (Freq: {frequencies.min():.4g} to {frequencies.max():.4g} Hz)")
-
-    circuit, z_fit = fit_equivalent_circuit(frequencies, z)
-    print("Circuit fit results:")
-    print(circuit)
-
-    fig, _ = plot_nyquist_squared(z, z_fit, title="Gamry Impedance Fit")
-    output_png = BASE_DIR / "nyquist_plot.png"
-    fig.savefig(output_png, dpi=200, bbox_inches="tight")
-    print(f"Nyquist plot saved to: {output_png}")
-
-
-if __name__ == "__main__":
-    main()
+plt.legend()
+plt.show()
