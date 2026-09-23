@@ -47,7 +47,7 @@ It contains sample data files representing common testing protocols (Electrochem
 
 1. **Clone the repository:**
    ```bash
-   git clone git@github.com:km-kushmathur/supercapacitor-testing.git
+   git clone https://github.com/km-kushmathur/supercapacitor-testing.git
    cd supercapacitor-testing
    ```
 
