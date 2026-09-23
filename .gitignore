@@ -21,3 +21,8 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+
+# Plot outputs
+*.png
+*.pdf
+outputs/
